@@ -16,6 +16,12 @@ A powerful command-line tool for managing multiple GitHub repositories with ease
 - Rust (latest stable version)
 - Git
 
+### Brew
+```
+brew tap AlexsJones/palette
+brew install palette
+```
+
 ### From Source
 
 ```bash
