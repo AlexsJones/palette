@@ -15,6 +15,7 @@ struct Args {
 enum Command {
     Push {},
     Pull {},
+    List {},
     Add {
         #[clap(short, long)]
         organization: String,
@@ -44,6 +45,12 @@ async fn main() -> Result<(), Error> {
             // get each repo and update
             for repo in configuration_manager.get_repository() {
                 repo_manager.update(repo)?
+            }
+        }
+        Command::List { .. } => {
+            for repo in configuration_manager.get_repository() {
+                println!("{} branch:{} commit:{} checked out: {}", repo.name, repo.checkout_info.branch_name, repo.checkout_info.commit_sha, if repo.cloned_locally { "yes"} else { "no" });
+
             }
         }
         Command::Add { organization, name } => {

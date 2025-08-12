@@ -1,0 +1,83 @@
+name: Release Binary on Tag
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+jobs:
+  build:
+    name: Build Release Binaries
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        arch: [x64, arm64]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+
+      - name: Install dependencies for cross-compilation
+        if: matrix.os == 'ubuntu-latest' && matrix.arch == 'arm64'
+        run: sudo apt-get update && sudo apt-get install -y gcc-aarch64-linux-gnu
+
+      - name: Add Rust target for cross-compilation
+        run: |
+          if [ "${{ matrix.os }}" == "ubuntu-latest" ] && [ "${{ matrix.arch }}" == "arm64" ]; then echo aarch64-unknown-linux-gnu; \
+             elif [ "${{ matrix.os }}" == "macos-latest" ] && [ "${{ matrix.arch }}" == "arm64" ]; then echo aarch64-apple-darwin; \
+             else echo; fi \
+          | xargs -r rustup target add
+
+      - name: Build release binary
+        if: matrix.os == 'ubuntu-latest' && matrix.arch == 'arm64'
+        uses: houseabsolute/actions-rust-cross@v1
+        with:
+          command: build
+          target: aarch64-unknown-linux-gnu
+          args: --release
+
+      - name: Build release binary
+        if: matrix.os != 'ubuntu-latest' || matrix.arch != 'arm64'
+        run: |
+          if [ "${{ matrix.os }}" == "ubuntu-latest" ] && [ "${{ matrix.arch }}" == "x64" ]; then TARGET=; SUFFIX=linux-amd64; \
+          elif [ "${{ matrix.os }}" == "macos-latest" ] && [ "${{ matrix.arch }}" == "arm64" ]; then TARGET=aarch64-apple-darwin; SUFFIX=darwin-arm64; \
+          else TARGET=; SUFFIX=darwin-amd64; fi; \
+          cargo build --release ${TARGET:+--target $TARGET}; \
+          if [ -n "$TARGET" ]; then cp target/$TARGET/release/${{ github.event.repository.name }} ${{ github.event.repository.name }}-$SUFFIX; else cp target/release/${{ github.event.repository.name }} ${{ github.event.repository.name }}-$SUFFIX; fi
+
+      - name: Upload binary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ github.event.repository.name }}-${{ matrix.os }}-${{ matrix.arch }}
+          path: ${{ github.event.repository.name }}-*
+
+  release:
+    name: Create Release and Upload Assets
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Display downloaded files
+        run: ls -R artifacts
+
+      - name: Create Release and Upload Asset
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          draft: false
+          prerelease: false
+          files: artifacts/**/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
