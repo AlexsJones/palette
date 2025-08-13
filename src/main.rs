@@ -40,7 +40,14 @@ async fn main() -> Result<(), Error> {
     let args = Args::parse();
 
     match args.command {
-        Command::Push { .. } => {}
+        Command::Push { .. } => {
+            // List each repos commit locally vs the remote
+            for repo in configuration_manager.get_repository() {
+
+            }
+            // confirm action
+            // push
+        }
         Command::Pull { .. } => {
             // get each repo and update
             for repo in configuration_manager.get_repository() {
