@@ -4,6 +4,7 @@ use regex::Regex;
 use std::io;
 use clap::{Parser, Subcommand};
 use anyhow::Error;
+use colorize::AnsiColor;
 use tokio::fs;
 use crate::config::{Configuration, Loads, Repository, Saves};
 use crate::repo::{Manager, Pulls, Pushes};
@@ -94,7 +95,15 @@ async fn main() -> Result<(), Error> {
         }
         Command::List { .. } => {
             for repo in configuration_manager.get_repository() {
-                println!("{} branch:{} commit:{} checked out: {}", repo.name, repo.checkout_info.branch_name, repo.checkout_info.commit_sha, if repo.cloned_locally { "yes"} else { "no" });
+
+                if let Ok((is_different, commit)) = repo_manager.compare(repo) {
+                    if is_different  {
+                        println!("{} branch:{}, commit:{:.8}, ahead of remote: {}, checked out: {}", repo.name, repo.checkout_info.branch_name, repo.checkout_info.commit_sha.as_str(), "yes".yellow(), if repo.cloned_locally { "yes".green()} else { "no".red() });
+                    }else {
+                        println!("{} branch:{}, commit:{:.8}, ahead of remote: {}, checked out: {}", repo.name, repo.checkout_info.branch_name, repo.checkout_info.commit_sha.as_str(), "no".green(),  if repo.cloned_locally { "yes".green()} else { "no".red() });
+                    }
+                }
+
             }
         }
         Command::Add { organization, name } => {
