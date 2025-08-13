@@ -4,6 +4,7 @@ use regex::Regex;
 use std::io;
 use clap::{Parser, Subcommand};
 use anyhow::Error;
+use tokio::fs;
 use crate::config::{Configuration, Loads, Repository, Saves};
 use crate::repo::{Manager, Pulls, Pushes};
 
@@ -77,36 +78,51 @@ async fn main() -> Result<(), Error> {
         Command::Pull { .. } => {
             // get each repo and update
             for repo in configuration_manager.get_repository() {
-                repo_manager.update(repo)?
+                // If the repository doesn't exist, clone instead
+                // this is a nice to have to keep palette in sync
+                let repo = repo.clone();
+                if let Ok(exists) =  fs::try_exists(repo.name.clone()).await {
+                    if !exists {
+                        println!("Repository {} was missing, fetching...", repo.name);
+                        add_repo(repo.organization, repo.name, configuration_manager.clone(),
+                                 repo_manager.clone(), false).await?;
+                        continue;
+                    }
+                }
+                repo_manager.update(&repo)?
             }
         }
         Command::List { .. } => {
             for repo in configuration_manager.get_repository() {
                 println!("{} branch:{} commit:{} checked out: {}", repo.name, repo.checkout_info.branch_name, repo.checkout_info.commit_sha, if repo.cloned_locally { "yes"} else { "no" });
-
             }
         }
         Command::Add { organization, name } => {
-
-            println!("Adding repository...");
-            // Add the repository to the configuration index
-            let mut repository = Repository::default();
-            repository.name = name.clone();
-            repository.organization = organization.clone();
-            configuration_manager.add_repository(repository.clone());
-            configuration_manager.save().await.expect("Could not save configuration");
-            // Pull the repository and update the index
-            let checkout_info = repo_manager.clone_repo(organization, name.clone())?;
-            
-            let saved_repo = configuration_manager.get_repository_mut(name);
-            saved_repo.checkout_info = checkout_info.clone();
-            saved_repo.cloned_locally = true;
-            configuration_manager.save().await.expect("Could not save configuration");
-            
+            add_repo(organization, name, configuration_manager, repo_manager, true).await?;
         }
         Command::Remove {  name } => {
             println!("Removing repository...");
         }
     }
+    Ok(())
+}
+
+async fn add_repo(organization: String, name: String, mut configuration_manager: Configuration,
+repo_manager: Manager, add_to_config: bool) -> Result<(), anyhow::Error>{
+    let mut repository = Repository::default();
+    if add_to_config {
+
+        repository.name = name.clone();
+        repository.organization = organization.clone();
+        configuration_manager.add_repository(repository.clone());
+        configuration_manager.save().await.expect("Could not save configuration");
+    }
+    // Pull the repository and update the index
+    let checkout_info = repo_manager.clone_repo(organization, name.clone())?;
+    let saved_repo = configuration_manager.get_repository_mut(name);
+    saved_repo.checkout_info = checkout_info.clone();
+    saved_repo.cloned_locally = true;
+    configuration_manager.save().await.expect("Could not save configuration");
+
     Ok(())
 }
