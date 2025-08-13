@@ -11,7 +11,7 @@ pub struct Repository {
     pub cloned_locally: bool,
     pub checkout_info: CheckOutInfo,
 }
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct Configuration {
     configuration_path: String,
     configuration_file_name: String,
