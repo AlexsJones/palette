@@ -4,7 +4,7 @@ mod config;
 use clap::{Parser, Subcommand};
 use anyhow::Error;
 use crate::config::{Configuration, Loads, Repository, Saves};
-use crate::repo::{Manager, Pulls};
+use crate::repo::{Manager, Pulls, Pushes};
 
 #[derive(Parser)]
 struct Args {
@@ -43,6 +43,9 @@ async fn main() -> Result<(), Error> {
         Command::Push { .. } => {
             // List each repos commit locally vs the remote
             for repo in configuration_manager.get_repository() {
+                if let Ok((is_different, commit)) = repo_manager.compare(repo) {
+                        println!("{}: {} ",repo.name,  commit )
+                }
 
             }
             // confirm action
@@ -62,6 +65,7 @@ async fn main() -> Result<(), Error> {
         }
         Command::Add { organization, name } => {
 
+            println!("Adding repository...");
             // Add the repository to the configuration index
             let mut repository = Repository::default();
             repository.name = name.clone();
@@ -77,7 +81,9 @@ async fn main() -> Result<(), Error> {
             configuration_manager.save().await.expect("Could not save configuration");
             
         }
-        Command::Remove {  .. } => {}
+        Command::Remove {  name } => {
+            println!("Removing repository...");
+        }
     }
     Ok(())
 }

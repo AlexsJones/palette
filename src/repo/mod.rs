@@ -16,6 +16,10 @@ pub(crate) trait Pulls {
 }
 pub(crate) trait Pushes {
     fn push(&self, name: String) -> Result<(), anyhow::Error>;
+    fn compare(
+        &self,
+        repo: &crate::config::Repository,
+    ) -> Result<(bool, String), anyhow::Error>;
 }
 
 #[derive(Default)]
@@ -115,6 +119,53 @@ impl Pulls for Manager {
 }
 impl Pushes for Manager {
 
+     fn compare(
+        &self,
+        repo: &crate::config::Repository,
+    ) -> Result<(bool, String), anyhow::Error> {
+        let r = repo.clone();
+        let repo = git2::Repository::open(r.name.clone())?;
+
+        // 1. Get local branch tip commit SHA
+        let head = repo.head()?;
+        let local_commit = head.peel_to_commit()?.id();
+
+        // 2. Prepare SSH callbacks
+        let mut callbacks = RemoteCallbacks::new();
+        callbacks.credentials(|_url, _username_from_url, _allowed_types| {
+            Cred::ssh_key(
+                "git",
+                Some(Path::new(&format!("{}/.ssh/id_rsa.pub", env::var("HOME").unwrap()))),
+                Path::new(&format!("{}/.ssh/id_rsa", env::var("HOME").unwrap())),
+                None,
+            )
+        });
+
+        // 3. Fetch remote without merging
+        let mut fetch_options = FetchOptions::new();
+        fetch_options.remote_callbacks(callbacks);
+
+        let mut remote = repo.find_remote("origin")?;
+        // You could parameterize branch instead of hardcoding "main"
+        remote.fetch(&["main"], Some(&mut fetch_options), None)?;
+
+        // 4. Get the remote tip commit SHA from FETCH_HEAD
+        let fetch_head = repo.find_reference("FETCH_HEAD")?;
+        let remote_commit = fetch_head.peel_to_commit()?.id();
+
+        // 5. Compare commits
+        if local_commit == remote_commit {
+            Ok((false, format!("Local and remote are both at {}", local_commit)))
+        } else {
+            Ok((
+                true,
+                format!(
+                    "Local is at {}, remote is at {}",
+                    local_commit, remote_commit
+                ),
+            ))
+        }
+    }
     fn push(&self, name: String) -> Result<(), anyhow::Error> {
         todo!()
     }
