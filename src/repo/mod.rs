@@ -1,15 +1,17 @@
 use std::env;
 use std::path::Path;
-use anyhow::anyhow;
+use anyhow::{anyhow, Error};
 use git2::build::RepoBuilder;
-use git2::{Cred, FetchOptions, PushOptions, RemoteCallbacks, Status, StatusOptions};
+use git2::{BranchType, Cred, FetchOptions, PushOptions, RemoteCallbacks, Status, StatusOptions};
 use serde::{Deserialize, Serialize};
-use crate::config::Repository;
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct CheckOutInfo {
     pub branch_name: String,
     pub commit_sha: String,
+}
+pub (crate) trait Branches {
+    fn change_branch(&self, branch_name: String, repo: &crate::config::Repository, create: bool) -> Result<CheckOutInfo, anyhow::Error>;
 }
 pub(crate) trait Pulls {
     fn clone_repo(&self, organization: String, name: String) -> Result<CheckOutInfo, anyhow::Error>;
@@ -27,12 +29,61 @@ pub(crate) trait Pushes {
 pub(crate) struct Manager{
 
 }
+impl Branches for Manager {
+    fn change_branch(
+        &self,
+        branch_name: String,
+        repo: &crate::config::Repository,
+        create: bool,
+    ) -> Result<CheckOutInfo, Error> {
+        use git2::{BranchType, Error, Repository};
+
+        let r = Repository::open(Path::new(&repo.name))?;
+
+        if create {
+            // Get the current commit HEAD points to
+            let head_commit = r.head()?.peel_to_commit()?;
+
+            // Try to create the branch (fails if it exists)
+            match r.branch(&branch_name, &head_commit, false) {
+                Ok(_) => {
+                    println!("Created branch '{}'", branch_name);
+                }
+                Err(e) if e.code() == git2::ErrorCode::Exists => {
+                    println!("Branch '{}' already exists, switching instead", branch_name);
+                }
+                Err(e) => return Err(anyhow::format_err!("{}", e.to_string())),
+            }
+        }
+
+        // Now find the branch (local)
+        let branch = r.find_branch(&branch_name, BranchType::Local)?;
+        let branch_ref = branch.into_reference();
+
+        let target_commit = branch_ref.peel_to_commit()?;
+
+        // Set HEAD to point to this branch
+        r.set_head(branch_ref.name().unwrap())?;
+
+        // Update working directory
+        r.checkout_head(Some(
+            git2::build::CheckoutBuilder::new()
+                .safe() // don't overwrite local changes
+        ))?;
+
+        Ok(CheckOutInfo {
+            branch_name: branch_ref
+                .shorthand()
+                .unwrap_or(&branch_name)
+                .to_string(),
+            commit_sha: target_commit.id().to_string(),
+        })
+    }
+}
 impl Pulls for Manager {
     fn clone_repo(&self, org_name: String, name: String) -> Result<CheckOutInfo, anyhow::Error> {
         let repo_url = format!(
-            "git@github.com:{}/{}.git",
-            org_name,
-            name
+            "git@github.com:{org_name}/{name}.git"
         );
         let mut builder = RepoBuilder::new();
         let mut fetch_options = FetchOptions::new();
@@ -62,7 +113,7 @@ impl Pulls for Manager {
 
         println!(
             "Check out complete, branch is {} at commit {} ",
-            branch_name.name().clone().unwrap(),
+            branch_name.name().unwrap(),
             commit.clone()
         );
         Ok(CheckOutInfo{
@@ -101,7 +152,7 @@ impl Pulls for Manager {
         // 6. Merge into current branch
         let analysis = repo.merge_analysis(&[&fetch_commit])?;
         if analysis.0.is_fast_forward() {
-            let refname = format!("refs/heads/main"); // branch param here too
+            let refname = "refs/heads/main".to_string(); // branch param here too
             let mut reference = repo.find_reference(&refname)?;
             reference.set_target(fetch_commit.id(), "Fast-Forward")?;
             repo.set_head(&refname)?;
@@ -119,76 +170,6 @@ impl Pulls for Manager {
     }
 }
 impl Pushes for Manager {
-
-
-    fn compare(
-        &self,
-        repo: &crate::config::Repository,
-    ) -> Result<(bool, String), anyhow::Error> {
-        let r = repo.clone();
-        let repo = git2::Repository::open(r.name.clone())?;
-
-        // 0. Check for unstaged changes
-        let mut status_opts = StatusOptions::new();
-        status_opts.include_untracked(true).recurse_untracked_dirs(true);
-        let statuses = repo.statuses(Some(&mut status_opts))?;
-
-        if !statuses.is_empty() {
-            println!("⚠️  Warning: There are uncommitted changes in '{}'", r.name);
-            for entry in statuses.iter() {
-                let s = entry.status();
-                let path = entry.path().unwrap_or("<unknown>");
-                if s.contains(Status::WT_MODIFIED) {
-                    println!("  - Modified: {}", path);
-                }
-                if s.contains(Status::WT_NEW) {
-                    println!("  - Untracked: {}", path);
-                }
-                if s.contains(Status::INDEX_MODIFIED) {
-                    println!("  - Staged change: {}", path);
-                }
-            }
-        }
-
-        // 1. Get local branch tip commit SHA
-        let head = repo.head()?;
-        let local_commit = head.peel_to_commit()?.id();
-
-        // 2. Prepare SSH callbacks
-        let mut callbacks = RemoteCallbacks::new();
-        callbacks.credentials(|_url, _username_from_url, _allowed_types| {
-            Cred::ssh_key(
-                "git",
-                Some(Path::new(&format!("{}/.ssh/id_rsa.pub", env::var("HOME").unwrap()))),
-                Path::new(&format!("{}/.ssh/id_rsa", env::var("HOME").unwrap())),
-                None,
-            )
-        });
-
-        // 3. Fetch remote without merging
-        let mut fetch_options = FetchOptions::new();
-        fetch_options.remote_callbacks(callbacks);
-
-        let mut remote = repo.find_remote("origin")?;
-        remote.fetch(&["main"], Some(&mut fetch_options), None)?;
-
-        // 4. Get the remote tip commit SHA from FETCH_HEAD
-        let fetch_head = repo.find_reference("FETCH_HEAD")?;
-        let remote_commit = fetch_head.peel_to_commit()?.id();
-
-        // 5. Compare commits
-        if local_commit == remote_commit {
-            Ok((false, format!("Local and remote are both at {}", local_commit)))
-        } else {
-            Ok((
-                true,
-                format!(
-                    "Local is at {}, remote is at {}",
-                    local_commit, remote_commit
-                ),
-            ))
-        }
-    }
     async fn push(&self, name: String) -> Result<(), anyhow::Error> {
         // 1. Open the repo
         let repo = git2::Repository::open(Path::new(&name))?;
@@ -225,10 +206,77 @@ impl Pushes for Manager {
 
         // 5. Push
         let mut remote = repo.find_remote("origin")?;
-        let refspec = format!("refs/heads/{}:refs/heads/{}", branch_name, branch_name);
+        let refspec = format!("refs/heads/{branch_name}:refs/heads/{branch_name}");
         remote.push(&[&refspec], Some(&mut push_opts))?;
 
-        println!("Pushed branch '{}' to origin", branch_name);
+        println!("Pushed branch '{branch_name}' to origin");
         Ok(())
+    }
+    fn compare(
+        &self,
+        repo: &crate::config::Repository,
+    ) -> Result<(bool, String), anyhow::Error> {
+        let r = repo.clone();
+        let repo = git2::Repository::open(r.name.clone())?;
+
+        // 0. Check for unstaged changes
+        let mut status_opts = StatusOptions::new();
+        status_opts.include_untracked(true).recurse_untracked_dirs(true);
+        let statuses = repo.statuses(Some(&mut status_opts))?;
+
+        if !statuses.is_empty() {
+            println!("⚠️  Warning: There are uncommitted changes in '{}'", r.name);
+            for entry in statuses.iter() {
+                let s = entry.status();
+                let path = entry.path().unwrap_or("<unknown>");
+                if s.contains(Status::WT_MODIFIED) {
+                    println!("  - Modified: {path}");
+                }
+                if s.contains(Status::WT_NEW) {
+                    println!("  - Untracked: {path}");
+                }
+                if s.contains(Status::INDEX_MODIFIED) {
+                    println!("  - Staged change: {path}");
+                }
+            }
+        }
+
+        // 1. Get local branch tip commit SHA
+        let head = repo.head()?;
+        let local_commit = head.peel_to_commit()?.id();
+
+        // 2. Prepare SSH callbacks
+        let mut callbacks = RemoteCallbacks::new();
+        callbacks.credentials(|_url, _username_from_url, _allowed_types| {
+            Cred::ssh_key(
+                "git",
+                Some(Path::new(&format!("{}/.ssh/id_rsa.pub", env::var("HOME").unwrap()))),
+                Path::new(&format!("{}/.ssh/id_rsa", env::var("HOME").unwrap())),
+                None,
+            )
+        });
+
+        // 3. Fetch remote without merging
+        let mut fetch_options = FetchOptions::new();
+        fetch_options.remote_callbacks(callbacks);
+
+        let mut remote = repo.find_remote("origin")?;
+        remote.fetch(&["main"], Some(&mut fetch_options), None)?;
+
+        // 4. Get the remote tip commit SHA from FETCH_HEAD
+        let fetch_head = repo.find_reference("FETCH_HEAD")?;
+        let remote_commit = fetch_head.peel_to_commit()?.id();
+
+        // 5. Compare commits
+        if local_commit == remote_commit {
+            Ok((false, format!("Local and remote are both at {local_commit}")))
+        } else {
+            Ok((
+                true,
+                format!(
+                    "Local is at {local_commit}, remote is at {remote_commit}"
+                ),
+            ))
+        }
     }
 }

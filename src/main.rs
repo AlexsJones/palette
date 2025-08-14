@@ -7,7 +7,7 @@ use anyhow::Error;
 use colorize::AnsiColor;
 use tokio::fs;
 use crate::config::{Configuration, Loads, Repository, Saves};
-use crate::repo::{Manager, Pulls, Pushes};
+use crate::repo::{Branches, Manager, Pulls, Pushes};
 
 #[derive(Parser)]
 struct Args {
@@ -17,8 +17,17 @@ struct Args {
 #[derive(Subcommand)]
 enum Command {
     Push {},
-    Pull {},
+    Pull {
+        #[clap(short, long)]
+        name: Option<String>
+    },
     List {},
+    Switch {
+        #[clap(short, long)]
+        branch_name: String,
+        #[clap(short, long)]
+        create: Option<bool>
+    },
     Add {
         #[clap(short, long)]
         organization: String,
@@ -50,7 +59,7 @@ async fn main() -> Result<(), Error> {
 
                 if let Ok((is_different, commit)) = repo_manager.compare(repo) {
                         println!("{}: {} ",repo.name,  commit );
-                    if is_different && candidate_updates.len() > 0 {
+                    if is_different && !candidate_updates.is_empty() {
                         candidate_updates.push(repo);
                     }
                 }
@@ -75,8 +84,23 @@ async fn main() -> Result<(), Error> {
                 });
             }
             // push
-        }
-        Command::Pull { .. } => {
+        },
+        Command::Switch { branch_name, create} => {
+            for repo in configuration_manager.get_repository() {
+
+                let checkoutInfo = repo_manager.change_branch(branch_name.clone(), repo, if create.is_some() { create.unwrap()} else { false })?;
+                println!("{} switched branch to {}", repo.name, checkoutInfo.branch_name)
+            }
+        },
+        Command::Pull { name } => {
+
+            if let Some(name) = name {
+                // This is a hack to pass through the right data structure, but all we need is the name
+                let mut repository = Repository::default();
+                repository.name = name;
+                repo_manager.update(&repository)?;
+                return Ok(())
+            }
             // get each repo and update
             for repo in configuration_manager.get_repository() {
                 // If the repository doesn't exist, clone instead
