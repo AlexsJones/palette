@@ -10,32 +10,53 @@ use crate::config::{Configuration, Loads, Repository, Saves};
 use crate::repo::{Branches, Manager, Pulls, Pushes};
 
 #[derive(Parser)]
+#[command(name = "palette")]
+#[command(about = "A powerful command-line tool for managing multiple GitHub repositories")]
+#[command(long_about = "Palette simplifies the process of working with numerous repositories by providing a unified interface for common Git operations across all your projects.")]
+#[command(version)]
 struct Args {
     #[clap(subcommand)]
     command: Command,
 }
 #[derive(Subcommand)]
 enum Command {
+    #[command(about = "Push changes for repositories that are ahead of remote")]
+    #[command(long_about = "Identifies repositories that have commits ahead of their remote and pushes them after user confirmation. Shows a list of repositories to be pushed and prompts for confirmation before proceeding.")]
     Push {},
+    
+    #[command(about = "Pull latest changes for repositories")]
+    #[command(long_about = "Pull latest changes for all tracked repositories or a specific repository. Automatically clones missing repositories during bulk pull operations and updates configuration with latest checkout information.")]
     Pull {
-        #[clap(short, long)]
+        #[clap(short, long, help = "Name of a specific repository to pull")]
         name: Option<String>
     },
+    
+    #[command(about = "List all tracked repositories with their status")]
+    #[command(long_about = "Display a comprehensive overview of all tracked repositories showing current branch, commit hash (first 8 characters), whether the local branch is ahead of remote, and checkout status with color-coded output.")]
     List {},
+    
+    #[command(about = "Switch all repositories to a specific branch")]
+    #[command(long_about = "Switch all tracked repositories to the specified branch. Optionally create new branches when --create is used. Updates configuration with new checkout information.")]
     Switch {
-        #[clap(short, long)]
+        #[clap(short, long, help = "Name of the branch to switch to")]
         branch_name: String,
-        #[clap(short, long)]
+        #[clap(short, long, help = "Create the branch if it doesn't exist")]
         create: Option<bool>
     },
+    
+    #[command(about = "Add a new repository to track and clone it")]
+    #[command(long_about = "Add a new repository to the configuration file and clone it locally. The repository will be tracked and included in future bulk operations.")]
     Add {
-        #[clap(short, long)]
+        #[clap(short, long, help = "GitHub organization or username that owns the repository")]
         organization: String,
-        #[clap(short, long)]
+        #[clap(short, long, help = "Name of the repository to add")]
         name: String,
     },
+    
+    #[command(about = "Remove a repository from tracking")]
+    #[command(long_about = "Remove a repository from the configuration file. Note: This command is currently under development and only prints a message.")]
     Remove {
-        #[clap(short, long)]
+        #[clap(short, long, help = "Name of the repository to remove from tracking")]
         name: String,
     }
 }
