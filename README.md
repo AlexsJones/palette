@@ -1,6 +1,8 @@
-# Palette
+<img src="logo.png" width="300">
 
-A powerful command-line tool for managing multiple GitHub repositories with ease. Palette simplifies the process of working with numerous repositories by providing a unified interface for common Git operations across all your projects.
+A powerful command-line tool for managing multiple GitHub repositories with ease. 
+
+Palette simplifies the process of working with numerous repositories by providing a unified interface for common Git operations across all your projects.
 
 ## Features
 
