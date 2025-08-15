@@ -11,8 +11,11 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-22.04, macos-latest] # Ubuntu pinned to 22.04 for working multiarch repos
+        os: [ubuntu-22.04, macos-latest]
         arch: [x64, arm64]
+        exclude:
+          - os: ubuntu-22.04
+            arch: arm64 # Removed Linux arm64 support
 
     steps:
       - name: Checkout code
@@ -24,39 +27,13 @@ jobs:
           toolchain: stable
           override: true
 
-      # Only runs for Ubuntu ARM64 builds
-      - name: Install cross-compilation dependencies (Linux arm64)
-        if: matrix.os == 'ubuntu-22.04' && matrix.arch == 'arm64'
-        run: |
-          sudo dpkg --add-architecture arm64
-          sudo apt-get update
-          sudo apt-get install -y \
-            gcc-aarch64-linux-gnu \
-            libssl-dev:arm64 \
-            zlib1g-dev:arm64 \
-            pkg-config
-
-      # Add the Rust target for the architecture
       - name: Add Rust target
         run: |
-          if [ "${{ matrix.os }}" == "ubuntu-22.04" ] && [ "${{ matrix.arch }}" == "arm64" ]; then
-            rustup target add aarch64-unknown-linux-gnu
-          elif [ "${{ matrix.os }}" == "macos-latest" ] && [ "${{ matrix.arch }}" == "arm64" ]; then
+          if [ "${{ matrix.os }}" == "macos-latest" ] && [ "${{ matrix.arch }}" == "arm64" ]; then
             rustup target add aarch64-apple-darwin
           fi
 
-      # Build for Ubuntu ARM64 with cross toolchain
-      - name: Build (Linux arm64)
-        if: matrix.os == 'ubuntu-22.04' && matrix.arch == 'arm64'
-        uses: houseabsolute/actions-rust-cross@v1
-        with:
-          command: build
-          target: aarch64-unknown-linux-gnu
-          args: --release
-
-      # Build for all other combinations
-      - name: Build (native)
-        if: matrix.os != 'ubuntu-22.04' || matrix.arch != 'arm64'
+      - name: Build
         run: |
           if [ "${{ matrix.os }}" == "ubuntu-22.04" ] && [ "${{ matrix.arch }}" == "x64" ]; then
             TARGET=
