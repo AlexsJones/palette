@@ -1,4 +1,4 @@
-<img src="logo.png" width="300">
+<img src="logo.png" width="200">
 
 A powerful command-line tool for managing multiple GitHub repositories with ease. 
 
