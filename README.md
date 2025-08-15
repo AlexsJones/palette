@@ -58,6 +58,9 @@ palette switch --branch-name feature-branch
 
 # Create and switch to a new branch across all repositories
 palette switch --branch-name new-feature --create true
+
+# Execute a command in all tracked repositories
+palette exec --run-command "git status"
 ```
 
 ### Repository Management
@@ -173,6 +176,25 @@ palette switch --branch-name new-feature --create true
 - Switches all tracked repositories to the specified branch
 - Optionally creates new branches when `--create true` is used
 - Updates configuration with new checkout information
+
+### Exec Command
+
+The `palette exec` command allows you to execute arbitrary commands across all tracked repositories:
+
+```bash
+# Execute git status in all repositories
+palette exec --run-command "git status"
+
+# Check for uncommitted changes
+palette exec --run-command "git diff --stat"
+
+# Run tests in all repositories
+palette exec --run-command "npm test"
+```
+
+- Executes the specified command in each tracked repository's directory
+- Displays output from all repositories sequentially
+- Useful for running checks, builds, or any command across your entire repository collection
 
 ### Managing Repositories
 

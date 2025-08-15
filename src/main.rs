@@ -8,7 +8,8 @@ use colorize::AnsiColor;
 use tokio::fs;
 use crate::config::{Configuration, Loads, Repository, Saves};
 use crate::repo::{Branches, Manager, Pulls, Pushes};
-
+use std::process::Command as stdCommand;
+use std::io::{Write};
 #[derive(Parser)]
 #[command(name = "palette")]
 #[command(about = "A powerful command-line tool for managing multiple GitHub repositories")]
@@ -52,7 +53,12 @@ enum Command {
         #[clap(short, long, help = "Name of the repository to add")]
         name: String,
     },
-    
+    #[command(about="Execute an arbitrary command in all repositories")]
+    #[command(long_about = "Execute the specified command in each tracked repository's directory. Displays output from all repositories sequentially. Useful for running checks, builds, or any command across your entire repository collection.")]
+    Exec {
+        #[clap(short, long, help = "Command to execute in all tracked repositories")]
+        run_command: String,
+    },
     #[command(about = "Remove a repository from tracking")]
     #[command(long_about = "Remove a repository from the configuration file. Note: This command is currently under development and only prints a message.")]
     Remove {
@@ -80,7 +86,7 @@ async fn main() -> Result<(), Error> {
 
                 if let Ok((is_different, commit)) = repo_manager.compare(repo) {
                         println!("{}: {} ",repo.name,  commit );
-                    if is_different && !candidate_updates.is_empty() {
+                    if is_different {
                         candidate_updates.push(repo);
                     }
                 }
@@ -153,7 +159,18 @@ async fn main() -> Result<(), Error> {
         }
         Command::Add { organization, name } => {
             add_repo(organization, name, configuration_manager, repo_manager, true).await?;
-        }
+        },
+        Command::Exec { run_command } => {
+            for repo in configuration_manager.get_repository() {
+                // use repo name as our path
+                let path = repo.clone().name;
+                let output = stdCommand::new("/bin/sh")
+                    .arg("-c").arg(run_command.clone())
+                    .current_dir(path)
+                    .output()?;
+                io::stdout().write_all(&output.stdout)?;
+            }
+        },
         Command::Remove {  name } => {
             println!("Removing repository...");
         }
