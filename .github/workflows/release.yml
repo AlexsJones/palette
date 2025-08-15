@@ -24,23 +24,29 @@ jobs:
           toolchain: stable
           override: true
 
-      - name: Install dependencies for cross-compilation
+      # Only runs for Ubuntu ARM64 builds
+      - name: Install cross-compilation dependencies (Linux arm64)
         if: matrix.os == 'ubuntu-latest' && matrix.arch == 'arm64'
         run: |
+          sudo dpkg --add-architecture arm64
           sudo apt-get update
           sudo apt-get install -y \
             gcc-aarch64-linux-gnu \
             libssl-dev:arm64 \
             zlib1g-dev:arm64 \
             pkg-config
-      - name: Add Rust target for cross-compilation
-        run: |
-          if [ "${{ matrix.os }}" == "ubuntu-latest" ] && [ "${{ matrix.arch }}" == "arm64" ]; then echo aarch64-unknown-linux-gnu; \
-             elif [ "${{ matrix.os }}" == "macos-latest" ] && [ "${{ matrix.arch }}" == "arm64" ]; then echo aarch64-apple-darwin; \
-             else echo; fi \
-          | xargs -r rustup target add
 
-      - name: Build release binary
+      # Add the Rust target for the architecture
+      - name: Add Rust target
+        run: |
+          if [ "${{ matrix.os }}" == "ubuntu-latest" ] && [ "${{ matrix.arch }}" == "arm64" ]; then
+            rustup target add aarch64-unknown-linux-gnu
+          elif [ "${{ matrix.os }}" == "macos-latest" ] && [ "${{ matrix.arch }}" == "arm64" ]; then
+            rustup target add aarch64-apple-darwin
+          fi
+
+      # Build for Ubuntu ARM64 with cross toolchain
+      - name: Build (Linux arm64)
         if: matrix.os == 'ubuntu-latest' && matrix.arch == 'arm64'
         uses: houseabsolute/actions-rust-cross@v1
         with:
@@ -48,14 +54,26 @@ jobs:
           target: aarch64-unknown-linux-gnu
           args: --release
 
-      - name: Build release binary
+      # Build for all other combinations
+      - name: Build (native)
         if: matrix.os != 'ubuntu-latest' || matrix.arch != 'arm64'
         run: |
-          if [ "${{ matrix.os }}" == "ubuntu-latest" ] && [ "${{ matrix.arch }}" == "x64" ]; then TARGET=; SUFFIX=linux-amd64; \
-          elif [ "${{ matrix.os }}" == "macos-latest" ] && [ "${{ matrix.arch }}" == "arm64" ]; then TARGET=aarch64-apple-darwin; SUFFIX=darwin-arm64; \
-          else TARGET=; SUFFIX=darwin-amd64; fi; \
-          cargo build --release ${TARGET:+--target $TARGET}; \
-          if [ -n "$TARGET" ]; then cp target/$TARGET/release/${{ github.event.repository.name }} ${{ github.event.repository.name }}-$SUFFIX; else cp target/release/${{ github.event.repository.name }} ${{ github.event.repository.name }}-$SUFFIX; fi
+          if [ "${{ matrix.os }}" == "ubuntu-latest" ] && [ "${{ matrix.arch }}" == "x64" ]; then
+            TARGET=
+            SUFFIX=linux-amd64
+          elif [ "${{ matrix.os }}" == "macos-latest" ] && [ "${{ matrix.arch }}" == "arm64" ]; then
+            TARGET=aarch64-apple-darwin
+            SUFFIX=darwin-arm64
+          else
+            TARGET=
+            SUFFIX=darwin-amd64
+          fi
+          cargo build --release ${TARGET:+--target $TARGET}
+          if [ -n "$TARGET" ]; then
+            cp target/$TARGET/release/${{ github.event.repository.name }} ${{ github.event.repository.name }}-$SUFFIX
+          else
+            cp target/release/${{ github.event.repository.name }} ${{ github.event.repository.name }}-$SUFFIX
+          fi
 
       - name: Upload binary artifact
         uses: actions/upload-artifact@v4
