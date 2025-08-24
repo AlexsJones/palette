@@ -1,34 +1,35 @@
+use anyhow::{Error, anyhow};
+use git2::build::RepoBuilder;
+use git2::{Cred, FetchOptions, PushOptions, RemoteCallbacks, Status, StatusOptions};
+use serde::{Deserialize, Serialize};
 use std::env;
 use std::path::Path;
-use anyhow::{anyhow, Error};
-use git2::build::RepoBuilder;
-use git2::{BranchType, Cred, FetchOptions, PushOptions, RemoteCallbacks, Status, StatusOptions};
-use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct CheckOutInfo {
     pub branch_name: String,
     pub commit_sha: String,
 }
-pub (crate) trait Branches {
-    fn change_branch(&self, branch_name: &str, repo: &crate::config::Repository, create: bool) -> Result<CheckOutInfo, anyhow::Error>;
+pub(crate) trait Branches {
+    fn change_branch(
+        &self,
+        branch_name: &str,
+        repo: &crate::config::Repository,
+        create: bool,
+    ) -> Result<CheckOutInfo, anyhow::Error>;
 }
 pub(crate) trait Pulls {
-    fn clone_repo(&self, organization: String, name: String) -> Result<CheckOutInfo, anyhow::Error>;
+    fn clone_repo(&self, organization: String, name: String)
+    -> Result<CheckOutInfo, anyhow::Error>;
     fn update(&self, repo: &crate::config::Repository) -> Result<(), anyhow::Error>;
 }
 pub(crate) trait Pushes {
     async fn push(&self, name: String) -> Result<(), anyhow::Error>;
-    fn compare(
-        &self,
-        repo: &crate::config::Repository,
-    ) -> Result<(bool, String), anyhow::Error>;
+    fn compare(&self, repo: &crate::config::Repository) -> Result<(bool, String), anyhow::Error>;
 }
 
 #[derive(Default, Clone)]
-pub(crate) struct Manager{
-
-}
+pub(crate) struct Manager {}
 impl Branches for Manager {
     fn change_branch(
         &self,
@@ -36,7 +37,7 @@ impl Branches for Manager {
         repo: &crate::config::Repository,
         create: bool,
     ) -> Result<CheckOutInfo, Error> {
-        use git2::{BranchType, Error, Repository};
+        use git2::{BranchType, Repository};
 
         let r = Repository::open(Path::new(&repo.name))?;
 
@@ -45,19 +46,19 @@ impl Branches for Manager {
             let head_commit = r.head()?.peel_to_commit()?;
 
             // Try to create the branch (fails if it exists)
-            match r.branch(&branch_name, &head_commit, false) {
+            match r.branch(branch_name, &head_commit, false) {
                 Ok(_) => {
-                    println!("Created branch '{}'", branch_name);
+                    println!("Created branch '{branch_name}'");
                 }
                 Err(e) if e.code() == git2::ErrorCode::Exists => {
-                    println!("Branch '{}' already exists, switching instead", branch_name);
+                    println!("Branch '{branch_name}' already exists, switching instead");
                 }
                 Err(e) => return Err(anyhow::format_err!("{}", e.to_string())),
             }
         }
 
         // Now find the branch (local)
-        let branch = r.find_branch(&branch_name, BranchType::Local)?;
+        let branch = r.find_branch(branch_name, BranchType::Local)?;
         let branch_ref = branch.into_reference();
 
         let target_commit = branch_ref.peel_to_commit()?;
@@ -67,24 +68,18 @@ impl Branches for Manager {
 
         // Update working directory
         r.checkout_head(Some(
-            git2::build::CheckoutBuilder::new()
-                .safe() // don't overwrite local changes
+            git2::build::CheckoutBuilder::new().safe(), // don't overwrite local changes
         ))?;
 
         Ok(CheckOutInfo {
-            branch_name: branch_ref
-                .shorthand()
-                .unwrap_or(&branch_name)
-                .to_string(),
+            branch_name: branch_ref.shorthand().unwrap_or(branch_name).to_string(),
             commit_sha: target_commit.id().to_string(),
         })
     }
 }
 impl Pulls for Manager {
     fn clone_repo(&self, org_name: String, name: String) -> Result<CheckOutInfo, anyhow::Error> {
-        let repo_url = format!(
-            "git@github.com:{org_name}/{name}.git"
-        );
+        let repo_url = format!("git@github.com:{org_name}/{name}.git");
         let mut builder = RepoBuilder::new();
         let mut fetch_options = FetchOptions::new();
         let mut callbacks = RemoteCallbacks::new();
@@ -102,8 +97,7 @@ impl Pulls for Manager {
         fetch_options.remote_callbacks(callbacks);
         builder.fetch_options(fetch_options);
 
-        let checked_out = builder
-            .clone(repo_url.as_str(), Path::new(name.as_str()));
+        let checked_out = builder.clone(repo_url.as_str(), Path::new(name.as_str()));
 
         // Save the git commit hash and branch to the config
         let checked_out = checked_out?;
@@ -116,13 +110,12 @@ impl Pulls for Manager {
             branch_name.name().unwrap(),
             commit.clone()
         );
-        Ok(CheckOutInfo{
+        Ok(CheckOutInfo {
             branch_name: branch_name.name().unwrap().to_string(),
             commit_sha: commit.clone(),
         })
     }
     fn update(&self, repo: &crate::config::Repository) -> Result<(), anyhow::Error> {
-
         let r = repo.clone();
         let repo = git2::Repository::open(r.name.clone())?;
 
@@ -131,7 +124,10 @@ impl Pulls for Manager {
         callbacks.credentials(|_url, _username_from_url, _allowed_types| {
             Cred::ssh_key(
                 "git",
-                Some(Path::new(&format!("{}/.ssh/id_rsa.pub", env::var("HOME").unwrap()))),
+                Some(Path::new(&format!(
+                    "{}/.ssh/id_rsa.pub",
+                    env::var("HOME").unwrap()
+                ))),
                 Path::new(&format!("{}/.ssh/id_rsa", env::var("HOME").unwrap())),
                 None,
             )
@@ -156,9 +152,7 @@ impl Pulls for Manager {
             let mut reference = repo.find_reference(&refname)?;
             reference.set_target(fetch_commit.id(), "Fast-Forward")?;
             repo.set_head(&refname)?;
-            repo.checkout_head(Some(
-                git2::build::CheckoutBuilder::default().force(),
-            ))?;
+            repo.checkout_head(Some(git2::build::CheckoutBuilder::default().force()))?;
             println!("Fast-forwarded to {}", fetch_commit.id());
         } else if analysis.0.is_normal() {
             repo.merge(&[&fetch_commit], None, None)?;
@@ -195,7 +189,10 @@ impl Pushes for Manager {
         callbacks.credentials(|_url, _username_from_url, _allowed_types| {
             Cred::ssh_key(
                 "git",
-                Some(Path::new(&format!("{}/.ssh/id_rsa.pub", env::var("HOME").unwrap()))),
+                Some(Path::new(&format!(
+                    "{}/.ssh/id_rsa.pub",
+                    env::var("HOME").unwrap()
+                ))),
                 Path::new(&format!("{}/.ssh/id_rsa", env::var("HOME").unwrap())),
                 None,
             )
@@ -212,16 +209,15 @@ impl Pushes for Manager {
         println!("Pushed branch '{branch_name}' to origin");
         Ok(())
     }
-    fn compare(
-        &self,
-        repo: &crate::config::Repository,
-    ) -> Result<(bool, String), anyhow::Error> {
+    fn compare(&self, repo: &crate::config::Repository) -> Result<(bool, String), anyhow::Error> {
         let r = repo.clone();
         let repo = git2::Repository::open(r.name.clone())?;
 
         // 0. Check for unstaged changes
         let mut status_opts = StatusOptions::new();
-        status_opts.include_untracked(true).recurse_untracked_dirs(true);
+        status_opts
+            .include_untracked(true)
+            .recurse_untracked_dirs(true);
         let statuses = repo.statuses(Some(&mut status_opts))?;
 
         if !statuses.is_empty() {
@@ -250,7 +246,10 @@ impl Pushes for Manager {
         callbacks.credentials(|_url, _username_from_url, _allowed_types| {
             Cred::ssh_key(
                 "git",
-                Some(Path::new(&format!("{}/.ssh/id_rsa.pub", env::var("HOME").unwrap()))),
+                Some(Path::new(&format!(
+                    "{}/.ssh/id_rsa.pub",
+                    env::var("HOME").unwrap()
+                ))),
                 Path::new(&format!("{}/.ssh/id_rsa", env::var("HOME").unwrap())),
                 None,
             )
@@ -269,13 +268,14 @@ impl Pushes for Manager {
 
         // 5. Compare commits
         if local_commit == remote_commit {
-            Ok((false, format!("Local and remote are both at {local_commit}")))
+            Ok((
+                false,
+                format!("Local and remote are both at {local_commit}"),
+            ))
         } else {
             Ok((
                 true,
-                format!(
-                    "Local is at {local_commit}, remote is at {remote_commit}"
-                ),
+                format!("Local is at {local_commit}, remote is at {remote_commit}"),
             ))
         }
     }
@@ -306,8 +306,9 @@ mod tests {
         let json = serde_json::to_string(&checkout).expect("Failed to serialize");
         assert!(json.contains("main"));
         assert!(json.contains("abc123def456"));
-        
-        let deserialized: CheckOutInfo = serde_json::from_str(&json).expect("Failed to deserialize");
+
+        let deserialized: CheckOutInfo =
+            serde_json::from_str(&json).expect("Failed to deserialize");
         assert_eq!(deserialized.branch_name, "main");
         assert_eq!(deserialized.commit_sha, "abc123def456");
     }
@@ -324,12 +325,15 @@ mod tests {
         let manager = Manager::default();
         let cloned = manager.clone();
         // Verify both instances exist and are equivalent
-        assert_eq!(std::mem::size_of_val(&manager), std::mem::size_of_val(&cloned));
+        assert_eq!(
+            std::mem::size_of_val(&manager),
+            std::mem::size_of_val(&cloned)
+        );
     }
 
     // Note: The following tests would require actual git repositories and SSH keys
     // For now, we'll test the structure and error conditions
-    
+
     #[test]
     fn test_invalid_repository_path_operations() {
         let manager = Manager::default();
@@ -351,7 +355,7 @@ mod tests {
     #[tokio::test]
     async fn test_push_invalid_repository() {
         let manager = Manager::default();
-        
+
         let push_result = manager.push("/nonexistent/path".to_string()).await;
         assert!(push_result.is_err());
     }
@@ -378,10 +382,10 @@ mod tests {
         // This would require setting up a real git repo in tempdir
         let temp_dir = tempdir().expect("Failed to create temp dir");
         let repo_path = temp_dir.path().join("test-repo");
-        
+
         // Initialize git repo
         let repo = git2::Repository::init(&repo_path).expect("Failed to init repo");
-        
+
         // Test operations with actual git repository
         // ... rest of test implementation
     }

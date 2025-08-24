@@ -1,13 +1,12 @@
 use palette::config::{Configuration, Repository};
 use palette::repo::CheckOutInfo;
 use tempfile::tempdir;
-use serde_json;
 
 #[tokio::test]
 async fn test_configuration_integration() {
     let temp_dir = tempdir().expect("Failed to create temp dir");
     let config_path = temp_dir.path().join("config.palette");
-    
+
     let mut config = Configuration {
         configuration_path: temp_dir.path().to_str().unwrap().to_string(),
         configuration_file_name: "config.palette".to_string(),
@@ -60,8 +59,9 @@ async fn test_checkout_info_operations() {
 
     // Test serialization/deserialization
     let serialized = serde_json::to_string(&checkout).expect("Serialization failed");
-    let deserialized: CheckOutInfo = serde_json::from_str(&serialized).expect("Deserialization failed");
-    
+    let deserialized: CheckOutInfo =
+        serde_json::from_str(&serialized).expect("Deserialization failed");
+
     assert_eq!(deserialized.branch_name, "feature-branch");
     assert_eq!(deserialized.commit_sha, "abcd1234");
 }
@@ -94,7 +94,7 @@ async fn test_repository_operations() {
     assert!(json.contains("test-org"));
     assert!(json.contains("main"));
     assert!(json.contains("xyz789"));
-    
+
     let deserialized: Repository = serde_json::from_str(&json).expect("Deserialization failed");
     assert_eq!(deserialized.name, repo.name);
     assert_eq!(deserialized.organization, repo.organization);
