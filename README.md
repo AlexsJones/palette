@@ -1,8 +1,6 @@
-<img src="logo.png" width="200">
+# Palette
 
-A powerful command-line tool for managing multiple GitHub repositories with ease. 
-
-Palette simplifies the process of working with numerous repositories by providing a unified interface for common Git operations across all your projects.
+A powerful command-line tool for managing multiple GitHub repositories with ease. Palette simplifies the process of working with numerous repositories by providing a unified interface for common Git operations across all your projects.
 
 ## Features
 
@@ -11,15 +9,12 @@ Palette simplifies the process of working with numerous repositories by providin
 - **Custom Filtering**: Target specific repositories using patterns or filters
 - **Parallel Processing**: Speed up operations with parallel execution
 - **Configuration**: Customize behavior through a simple configuration file
-- **Interactive Confirmations**: Safe push operations with user confirmation prompts
-- **Automatic Repository Cloning**: Missing repositories are automatically cloned during pull operations
 
 ## Installation
 
 ### Prerequisites
 - Rust (latest stable version)
 - Git
-- A GitHub account with repositories to manage
 
 ### Brew
 ```
@@ -30,49 +25,152 @@ brew install palette
 ### From Source
 
 ```bash
-git clone https://github.com/AlexsJones/palette.git
+git clone https://github.com/yourusername/palette.git
 cd palette
 cargo install --path .
 ```
 
 ## Usage
 
-### Basic Commands
-
 ```bash
-# List all tracked repositories with their status
-# Shows branch, commit hash, ahead status, and checkout status
+# List all repositories
 palette list
 
 # Pull latest changes for all repositories
-# Automatically clones missing repositories
+palette pull
+
+# Execute a custom git command across repositories
+palette exec "git status"
+
+# Clone all repositories from a GitHub organization
+palette clone org/your-org
+
+```
+
+## Managing Multiple Repositories in One Folder
+
+One of palette's key strengths is organizing and managing multiple GitHub repositories within a single root directory. This approach allows you to work with dozens or hundreds of repositories efficiently.
+
+### Example Project Structure
+
+Here's how your workspace might look when using palette to manage multiple repositories:
+
+```
+~/workspace/
+├── config.palette              # Palette configuration file
+├── frontend-app/               # Repository 1
+│   ├── .git/
+│   ├── package.json
+│   └── src/
+├── backend-api/                # Repository 2  
+│   ├── .git/
+│   ├── Cargo.toml
+│   └── src/
+├── mobile-app/                 # Repository 3
+│   ├── .git/
+│   ├── android/
+│   └── ios/
+├── documentation/              # Repository 4
+│   ├── .git/
+│   ├── docs/
+│   └── README.md
+├── infrastructure/             # Repository 5
+│   ├── .git/
+│   ├── terraform/
+│   └── kubernetes/
+└── shared-libraries/           # Repository 6
+    ├── .git/
+    ├── lib1/
+    └── lib2/
+```
+
+### Adding Repositories to Your Workspace
+
+```bash
+# Navigate to your workspace root
+cd ~/workspace
+
+# Add repositories one by one
+palette add --organization myorg --name frontend-app
+palette add --organization myorg --name backend-api  
+palette add --organization myorg --name mobile-app
+palette add --organization myorg --name documentation
+palette add --organization myorg --name infrastructure
+palette add --organization myorg --name shared-libraries
+
+# Or add from different organizations
+palette add --organization external-org --name useful-library
+palette add --organization community --name open-source-tool
+```
+
+### Bulk Operations Across All Repositories
+
+Once you have multiple repositories set up, palette makes it easy to perform operations across all of them:
+
+```bash
+# Check status of all repositories
+palette list
+# Output:
+# frontend-app branch:main, commit:a1b2c3d4, ahead of remote: no, checked out: yes
+# backend-api branch:develop, commit:e5f6g7h8, ahead of remote: yes, checked out: yes  
+# mobile-app branch:main, commit:i9j0k1l2, ahead of remote: no, checked out: yes
+# ...
+
+# Pull latest changes for all repositories
 palette pull
 
 # Pull changes for a specific repository
-palette pull --name repository-name
+palette pull --name frontend-app
 
-# Push changes for repositories that are ahead of remote
-# Shows confirmation prompt before pushing
+# Switch all repositories to a new branch
+palette switch --branch-name feature/new-feature --create
+
+# Push all repositories that are ahead of remote
 palette push
 
-# Switch all repositories to a specific branch
-palette switch --branch-name feature-branch
-
-# Create and switch to a new branch across all repositories
-palette switch --branch-name new-feature --create true
-
-# Execute a command in all tracked repositories
-palette exec --run-command "git status"
+# Execute custom commands across all repositories
+palette exec "npm install"           # Install dependencies in all Node.js projects
+palette exec "cargo check"           # Check all Rust projects
+palette exec "git log --oneline -5"  # Show last 5 commits in each repo
+palette exec "find . -name '*.md' | wc -l"  # Count markdown files
 ```
 
-### Repository Management
+### Real-World Scenarios
 
+**Microservices Development:**
 ```bash
-# Add a new repository to track and clone it
-palette add --organization AlexsJones --name my-repo
+# You have 15 microservices, each in its own repository
+palette add --organization mycompany --name user-service
+palette add --organization mycompany --name payment-service
+palette add --organization mycompany --name notification-service
+# ... add all 15 services
 
-# Remove a repository from tracking
-palette remove --name repository-name
+# Update all services to latest
+palette pull
+
+# Create a new feature branch across all services  
+palette switch --branch-name feature/add-logging --create
+
+# Run tests across all services
+palette exec "npm test"
+
+# Push changes to all services
+palette push
+```
+
+**Open Source Contribution:**
+```bash
+# Track multiple projects you contribute to
+palette add --organization kubernetes --name kubernetes
+palette add --organization docker --name docker
+palette add --organization rust-lang --name rust
+palette add --organization nodejs --name node
+
+# Stay up to date with all projects
+palette pull
+
+# Check what needs attention
+palette list
 ```
 
 ## Configuration
@@ -82,7 +180,7 @@ Palette uses a JSON configuration file named `config.palette` that tracks your r
 ```json
 {
   "configuration_path": ".",
-  "configuration_file_name": "config.palette", 
+  "configuration_file_name": "config.palette",
   "configuration_full_path": "./config.palette",
   "repository": [
     {
@@ -97,106 +195,6 @@ Palette uses a JSON configuration file named `config.palette` that tracks your r
   ]
 }
 ```
-
-### Configuration Fields
-
-- `configuration_path`: The directory where the configuration file is stored
-- `configuration_file_name`: The name of the configuration file
-- `configuration_full_path`: The full path to the configuration file
-- `repository`: Array of tracked repositories
-
-### Repository Fields
-
-- `name`: Repository name
-- `organization`: GitHub organization or username
-- `cloned_locally`: Whether the repository is cloned on your local machine
-- `checkout_info`: Information about the current checkout state
-  - `branch_name`: Current branch (with refs/heads/ prefix)
-  - `commit_sha`: Current commit SHA
-
-## Command Details
-
-### List Command
-
-The `palette list` command provides a comprehensive overview of all tracked repositories:
-
-```bash
-palette list
-```
-
-Output format:
-```
-repo-name branch:refs/heads/main, commit:abcd1234, ahead of remote: yes/no, checked out: yes/no
-```
-
-- Shows current branch name
-- Displays first 8 characters of commit SHA
-- Indicates if local branch is ahead of remote (colored output)
-- Shows if repository is cloned locally (colored output)
-
-### Push Command
-
-The `palette push` command safely pushes changes with interactive confirmation:
-
-```bash
-palette push
-```
-
-- Identifies repositories that are ahead of their remote
-- Shows a list of repositories to be pushed
-- Prompts for confirmation before proceeding
-- Pushes repositories in parallel for efficiency
-
-### Pull Command
-
-The `palette pull` command intelligently handles repository updates:
-
-```bash
-# Pull all repositories
-palette pull
-
-# Pull specific repository
-palette pull --name my-repo
-```
-
-- Automatically clones missing repositories during bulk pull operations
-- Updates configuration with latest checkout information
-- Handles individual repository pulls when specified
-
-### Switch Command
-
-The `palette switch` command manages branch operations across repositories:
-
-```bash
-# Switch to existing branch
-palette switch --branch-name feature-branch
-
-# Create and switch to new branch
-palette switch --branch-name new-feature --create true
-```
-
-- Switches all tracked repositories to the specified branch
-- Optionally creates new branches when `--create true` is used
-- Updates configuration with new checkout information
-
-### Exec Command
-
-The `palette exec` command allows you to execute arbitrary commands across all tracked repositories:
-
-```bash
-# Execute git status in all repositories
-palette exec --run-command "git status"
-
-# Check for uncommitted changes
-palette exec --run-command "git diff --stat"
-
-# Run tests in all repositories
-palette exec --run-command "npm test"
-```
-
-- Executes the specified command in each tracked repository's directory
-- Displays output from all repositories sequentially
-- Useful for running checks, builds, or any command across your entire repository collection
 
 ### Managing Repositories
 
@@ -216,15 +214,6 @@ palette list
 ## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
-
-### Development Status
-
-This project is actively being developed. Current version is 0.1.0 and uses Rust edition 2024.
-
-### Known Limitations
-
-- The `remove` command is currently under development
-- Push operations require manual confirmation for safety
 
 ## License
 
