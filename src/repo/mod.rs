@@ -11,7 +11,7 @@ pub struct CheckOutInfo {
     pub commit_sha: String,
 }
 pub (crate) trait Branches {
-    fn change_branch(&self, branch_name: String, repo: &crate::config::Repository, create: bool) -> Result<CheckOutInfo, anyhow::Error>;
+    fn change_branch(&self, branch_name: &str, repo: &crate::config::Repository, create: bool) -> Result<CheckOutInfo, anyhow::Error>;
 }
 pub(crate) trait Pulls {
     fn clone_repo(&self, organization: String, name: String) -> Result<CheckOutInfo, anyhow::Error>;
@@ -32,7 +32,7 @@ pub(crate) struct Manager{
 impl Branches for Manager {
     fn change_branch(
         &self,
-        branch_name: String,
+        branch_name: &str,
         repo: &crate::config::Repository,
         create: bool,
     ) -> Result<CheckOutInfo, Error> {
@@ -279,4 +279,111 @@ impl Pushes for Manager {
             ))
         }
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::Repository;
+
+    fn create_test_checkout_info() -> CheckOutInfo {
+        CheckOutInfo {
+            branch_name: "main".to_string(),
+            commit_sha: "abc123def456".to_string(),
+        }
+    }
+
+    #[test]
+    fn test_checkout_info_default() {
+        let checkout = CheckOutInfo::default();
+        assert!(checkout.branch_name.is_empty());
+        assert!(checkout.commit_sha.is_empty());
+    }
+
+    #[test]
+    fn test_checkout_info_serialization() {
+        let checkout = create_test_checkout_info();
+        let json = serde_json::to_string(&checkout).expect("Failed to serialize");
+        assert!(json.contains("main"));
+        assert!(json.contains("abc123def456"));
+        
+        let deserialized: CheckOutInfo = serde_json::from_str(&json).expect("Failed to deserialize");
+        assert_eq!(deserialized.branch_name, "main");
+        assert_eq!(deserialized.commit_sha, "abc123def456");
+    }
+
+    #[test]
+    fn test_manager_default() {
+        let manager = Manager::default();
+        // Just test that it can be created - it's a unit struct
+        assert_eq!(std::mem::size_of_val(&manager), 0);
+    }
+
+    #[test]
+    fn test_manager_clone() {
+        let manager = Manager::default();
+        let cloned = manager.clone();
+        // Verify both instances exist and are equivalent
+        assert_eq!(std::mem::size_of_val(&manager), std::mem::size_of_val(&cloned));
+    }
+
+    // Note: The following tests would require actual git repositories and SSH keys
+    // For now, we'll test the structure and error conditions
+    
+    #[test]
+    fn test_invalid_repository_path_operations() {
+        let manager = Manager::default();
+        let repo = Repository {
+            name: "/nonexistent/path".to_string(),
+            organization: "test-org".to_string(),
+            cloned_locally: false,
+            checkout_info: CheckOutInfo::default(),
+        };
+
+        // These should fail gracefully with proper error messages
+        let update_result = manager.update(&repo);
+        assert!(update_result.is_err());
+
+        let compare_result = manager.compare(&repo);
+        assert!(compare_result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_push_invalid_repository() {
+        let manager = Manager::default();
+        
+        let push_result = manager.push("/nonexistent/path".to_string()).await;
+        assert!(push_result.is_err());
+    }
+
+    #[test]
+    fn test_change_branch_invalid_repository() {
+        let manager = Manager::default();
+        let repo = Repository {
+            name: "/nonexistent/path".to_string(),
+            organization: "test-org".to_string(),
+            cloned_locally: false,
+            checkout_info: CheckOutInfo::default(),
+        };
+
+        let branch_result = manager.change_branch("feature-branch", &repo, false);
+        assert!(branch_result.is_err());
+    }
+
+    // Integration-style tests that would work with actual git repos
+    // These are commented out because they require git repositories
+    /*
+    #[test]
+    fn test_with_real_git_repo() {
+        // This would require setting up a real git repo in tempdir
+        let temp_dir = tempdir().expect("Failed to create temp dir");
+        let repo_path = temp_dir.path().join("test-repo");
+        
+        // Initialize git repo
+        let repo = git2::Repository::init(&repo_path).expect("Failed to init repo");
+        
+        // Test operations with actual git repository
+        // ... rest of test implementation
+    }
+    */
 }

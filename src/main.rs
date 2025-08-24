@@ -1,5 +1,5 @@
-mod repo;
-mod config;
+pub mod repo;
+pub mod config;
 use regex::Regex;
 use std::io;
 use clap::{Parser, Subcommand};
@@ -115,7 +115,7 @@ async fn main() -> Result<(), Error> {
         Command::Switch { branch_name, create} => {
             for repo in configuration_manager.get_repository() {
 
-                let checkoutInfo = repo_manager.change_branch(branch_name.clone(), repo, if create.is_some() { create.unwrap()} else { false })?;
+                let checkoutInfo = repo_manager.change_branch(branch_name.as_str(), repo, if create.is_some() { create.unwrap()} else { false })?;
                 println!("{} switched branch to {}", repo.name, checkoutInfo.branch_name)
             }
         },
